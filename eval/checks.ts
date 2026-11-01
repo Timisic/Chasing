@@ -141,7 +141,7 @@ const CHECKS: Array<{ name: string; hard: boolean; run(session: SessionEvidence)
       const errors = tools.filter((tool) => tool.isError && !isBlocked(tool));
       return {
         pass: errors.length === 0,
-        detail: errors.length ? countBy(errors.map(({ toolName, text }) => `${toolName}: ${text}`)) : "none",
+        detail: errors.length ? countBy(errors.map(({ toolName, text }) => `${toolName}: ${text.split("\n")[0]}`)) : "none",
         sequences: [],
       };
     },

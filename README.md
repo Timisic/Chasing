@@ -79,6 +79,8 @@ npm run check
 
 `npm run check` 依次运行严格 TypeScript 类型检查和 session-level acceptance tests。
 
+`npm run simulate -- <scenarioId|all> [--model provider/id]` 用模拟学习者（`eval/scenarios.ts`）驱动真实 Chasing 会话，默认模型 `deepseek/deepseek-v4-flash`。每次运行写入 `eval/runs/<时间>-<场景>/`：`workspace/.chasing/sessions/` 下的证据、`transcript.md` 和 `report.json`（`eval/checks.ts` 的检查结果）。任一硬检查失败时退出码非零；工具报错和轮数用尽只报告。
+
 主要文件：
 
 - `src/index.ts`：Pi 生命周期、命令和 Chasing 工具
