@@ -26,7 +26,8 @@ import { buildChasingPrompt } from "./prompt.ts";
 import { fetchRetrievedSources, type HostResolver } from "./retrieval.ts";
 
 const STATE_ENTRY = "chasing:state";
-const MATERIAL_ACCESS_BLOCK_REASON =
+const THINKING_LABEL = "Chasing 正在选择下一问…";
+export const MATERIAL_ACCESS_BLOCK_REASON =
   "Chasing does not inspect the current workspace. Only explicitly supplied Markdown material may be read.";
 
 function textResult(text: string, details: Record<string, unknown> = {}) {
@@ -126,6 +127,11 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     return { state, recorder, config, context };
   };
 
+  const requireActive = () => {
+    if (!state?.active) throw new Error("Chasing is inactive. The user must run /chasing to start a topic.");
+    return requireRuntime();
+  };
+
   const record = async (type: string, data: Record<string, unknown>) => {
     const runtime = requireRuntime();
     return runtime.recorder.record(runtime.state, type, data);
@@ -137,35 +143,26 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     runtime.context.ui.setStatus("chasing", phaseStatus(phase));
   };
 
-  pi.on("session_start", async (event, ctx) => {
+  pi.on("session_start", async (_event, ctx) => {
     context = ctx;
     config = await loadConfig(ctx.cwd);
-    state = restoreState(ctx) ?? createInitialState(ctx.sessionManager.getSessionId() || randomUUID());
-    if ((state.phase as string) === "questioning") state.phase = "deepening";
-    state.versions.config = CONFIG_VERSION;
-    state.retrievals ??= [];
-    state.masteryMap ??= [];
-    state.coverage ??= [];
-    state.verificationCompleted ??= false;
-    const model = snapshotModel(ctx);
-    if (model) {
-      state.model = model;
-    } else {
-      delete state.model;
-    }
+    state = restoreState(ctx);
     recorder = new EvidenceRecorder(
       ctx.cwd,
       config,
       pi,
       config.langfuse.enabled ? new LangfuseSynchronizer(config.langfuse) : new DisabledSynchronizer(),
     );
-
-    ctx.ui.setStatus("chasing", state.active ? phaseStatus(state.phase) : undefined);
-    ctx.ui.setHiddenThinkingLabel("Chasing 正在选择下一问…");
-    if (event.reason === "startup" && state.active && state.sequence === 0) {
-      await record("session_started", { piSessionFile: ctx.sessionManager.getSessionFile() });
-      pi.setSessionName("Chasing");
+    if (!state?.active) return;
+    state.versions.config = CONFIG_VERSION;
+    const model = snapshotModel(ctx);
+    if (model) {
+      state.model = model;
+    } else {
+      delete state.model;
     }
+    ctx.ui.setStatus("chasing", phaseStatus(state.phase));
+    ctx.ui.setHiddenThinkingLabel(THINKING_LABEL);
   });
 
   pi.on("before_agent_start", async (event) => {
@@ -252,7 +249,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       ),
     }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       if (runtime.state.mission) throw new Error("Diagnostic rounds belong before mission confirmation");
       if (runtime.state.pendingQuestion && !runtime.state.pendingQuestion.answered) {
         throw new Error("A Chasing question is already awaiting the user's answer");
@@ -306,7 +303,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       ),
     }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       if (runtime.state.mission) {
         throw new Error("Record the diagnostic mastery map before mission confirmation");
       }
@@ -341,7 +338,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       ),
     }),
     async execute(_id, params, signal) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       const query = params.query.trim();
       if (!query) throw new Error("Retrieval query is required");
       const sources = await fetchRetrievedSources(
@@ -411,8 +408,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       ),
     }),
     async execute(_toolCallId, params) {
-      const runtime = requireRuntime();
-      if (!runtime.state.active) throw new Error("Chasing is inactive");
+      const runtime = requireActive();
       if (params.stage !== "onboarding" && !runtime.state.mission) throw new Error("Confirm the mission before core questioning");
       if (params.stage !== "onboarding" && runtime.state.coverage.length === 0) {
         throw new Error("Define mission coverage before core questioning");
@@ -514,7 +510,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       reason: Type.String(),
     }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       runtime.state.recommendedMode = params.mode as ChasingMode;
       await record("mode_recommended", { mode: params.mode, reason: params.reason });
       return textResult(`Recommend ${params.mode}; the user must confirm or override it.`);
@@ -529,7 +525,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       mode: Type.Union([Type.Literal("learn"), Type.Literal("clarify-decide")]),
     }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       runtime.state.mode = params.mode as ChasingMode;
       runtime.state.evaluationEligible = params.mode === "learn";
       await record("mode_confirmed", { mode: params.mode, overrodeRecommendation: params.mode !== runtime.state.recommendedMode });
@@ -543,7 +539,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     description: "Record a concise mission proposal for user review.",
     parameters: Type.Object({ mission: Type.String() }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       runtime.state.proposedMission = params.mission.trim();
       setPhase("mission-review");
       await record("mission_proposed", { mission: runtime.state.proposedMission });
@@ -557,7 +553,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     description: "Persist the user's explicitly confirmed or corrected mission.",
     parameters: Type.Object({ mission: Type.String() }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       if (!runtime.state.mode) throw new Error("Confirm a mode before the mission");
       if (runtime.state.mode === "learn" && runtime.state.masteryMap.length === 0) {
         throw new Error("Record an evidence-backed mastery map before confirming a Learn mission");
@@ -575,7 +571,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     description: "Capture one or more local Markdown files as canonical session evidence.",
     parameters: Type.Object({ paths: Type.Array(Type.String(), { minItems: 1 }) }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       const captured = [];
       for (const inputPath of params.paths) {
         const absolutePath = await realpath(resolve(runtime.context.cwd, inputPath));
@@ -609,7 +605,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       items: Type.Array(Type.Object({ topic: Type.String() }), { minItems: 3, maxItems: 8 }),
     }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       if (!runtime.state.mission) throw new Error("Confirm the mission before defining coverage");
       const topics = params.items.map(({ topic }) => topic.trim()).filter(Boolean);
       if (topics.length < 3 || topics.length > 8) throw new Error("Mission coverage must contain 3-8 items");
@@ -636,7 +632,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       ),
     }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       for (const update of params.updates) {
         const item = runtime.state.coverage.find(({ topic }) => topic === update.topic);
         if (!item) throw new Error(`Unknown coverage topic: ${update.topic}`);
@@ -656,7 +652,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     description: "Record a lightweight end suggestion. This never ends the session by itself.",
     parameters: Type.Object({ reason: Type.String() }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       if (runtime.state.coverage.length === 0) throw new Error("Define mission coverage before suggesting the end");
       if (!runtime.state.verificationCompleted) throw new Error("Complete a verification question before suggesting the end");
       if (runtime.state.coverage.some(({ status }) => status !== "verified")) {
@@ -675,7 +671,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     description: "End only after the user explicitly confirms. Never generate a summary.",
     parameters: Type.Object({ confirmed: Type.Boolean() }),
     async execute(_id, params) {
-      const runtime = requireRuntime();
+      const runtime = requireActive();
       if (!params.confirmed) {
         setPhase("deepening");
         runtime.state.endSuggested = false;
@@ -726,6 +722,8 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       const model = snapshotModel(ctx);
       if (model) state.model = model;
       ctx.ui.setStatus("chasing", phaseStatus(state.phase));
+      ctx.ui.setHiddenThinkingLabel(THINKING_LABEL);
+      pi.setSessionName("Chasing");
       await record("session_started", { previousSessionId, piSessionFile: ctx.sessionManager.getSessionFile() });
       ctx.ui.notify("新的 Chasing 主题已就绪，请发送主题、问题或 Markdown 材料。", "info");
     },

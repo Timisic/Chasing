@@ -26,11 +26,11 @@ Pi 会从 `package.json` 的 `pi.extensions` 读取入口。项目级 Extension 
 
 ## 使用
 
-- Pi 启动后 Chasing 保持静默，等待用户主动发送主题、问题、粘贴内容或明确指定的 Markdown 材料；它不会把当前目录当成材料，也不会自动扫描目录。
+- Pi 启动后 Chasing 不启用，普通 Pi 会话不受影响。运行 `/chasing` 开始一个主题，再发送主题、问题、粘贴内容或明确指定的 Markdown 材料；它不会把当前目录当成材料，也不会自动扫描目录。重新打开一个仍在进行中的 Chasing 会话时，状态会自动恢复。
 - Learn onboarding 先用一轮 Batch 掌握度探测覆盖当前可问的 frontier，保存 `known / partial / unknown / misconception` mastery map；mission 确认后恢复每轮一个认知任务。
 - 底部状态会依次显示目标澄清、掌握度探测、任务确认、全景构建、盲区深挖、理解验收和结束确认。
 - `/chasing-leave`：退出 Chasing，恢复普通 Pi。
-- `/chasing`：在当前 Pi session 中开始一个新的 Chasing 主题。
+- `/chasing`：在当前 Pi session 中开启 Chasing，开始一个新主题。
 - `/chasing-sync`：把当前 session 的本地证据重放到已配置的 Langfuse。
 - Learn 模式只接受本地 `.md` 或 `.markdown` 材料；Extension 会保存内容快照和 SHA-256，而不只保存易失效的路径。
 - 每轮问题会先记录内部 rationale，再显示一个问题。背景、术语、例子、核心问句和回答提示分别保存，避免为了“单问”截断必要信息。用户回答会在下一轮模型调用前关联到对应问题。

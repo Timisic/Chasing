@@ -78,10 +78,21 @@ async function harness() {
   return { cwd, pi, context, notifications, statuses };
 }
 
+async function runCommand(pi: FakePi, name: string, context: any) {
+  const command = pi.commands.get(name);
+  assert.ok(command, `command ${name} should be registered`);
+  await command.handler("", context);
+}
+
 async function startedHarness() {
   const result = await harness();
   await result.pi.emit("session_start", { type: "session_start", reason: "startup" }, result.context);
+  await runCommand(result.pi, "chasing", result.context);
   return result;
+}
+
+function evidencePath(cwd: string, pi: FakePi): string {
+  return join(cwd, ".chasing", "sessions", `${latestState(pi).sessionId}.jsonl`);
 }
 
 async function runTool(pi: FakePi, name: string, params: Record<string, unknown>) {
@@ -124,16 +135,33 @@ async function establishLearnMission(pi: FakePi, context: any, mission: string) 
   });
 }
 
-test("Pi startup activates Chasing silently and waits for user input", async () => {
-  const { pi, context } = await harness();
+test("Pi startup leaves Chasing inactive until the user runs /chasing", async () => {
+  const { pi, context, statuses } = await harness();
 
   await pi.emit("session_start", { type: "session_start", reason: "startup" }, context);
 
   assert.equal(pi.messages.length, 0);
-  assert.ok(pi.commands.has("chasing-leave"));
-  assert.ok(pi.commands.has("chasing-sync"));
-  assert.ok(pi.tools.has("chasing_prepare_question"));
-  assert.equal(pi.entries[0]?.customType, "chasing:event");
+  assert.equal(pi.entries.length, 0);
+  assert.deepEqual(statuses, []);
+  const [prompt] = await pi.emit(
+    "before_agent_start",
+    { type: "before_agent_start", prompt: "卸载 Chasing 这个 pi extension", systemPrompt: "BASE", systemPromptOptions: {} },
+    context,
+  );
+  assert.equal(prompt, undefined);
+  const [guard] = await pi.emit(
+    "tool_call",
+    { type: "tool_call", toolCallId: "bash-1", toolName: "bash", input: { command: "pi remove chasing" } },
+    context,
+  );
+  assert.equal(guard, undefined);
+  await assert.rejects(runTool(pi, "chasing_confirm_mode", { mode: "learn" }), /inactive.*\/chasing/i);
+
+  await runCommand(pi, "chasing", context);
+  assert.equal(latestState(pi).active, true);
+  assert.equal(statuses.at(-1), "Chasing · 目标澄清");
+  const started: any = pi.entries.find((entry) => entry.customType === "chasing:event");
+  assert.equal(started.data.type, "session_started");
 });
 
 test("Chasing blocks implicit workspace enumeration before the user supplies material", async () => {
@@ -170,6 +198,7 @@ test("print mode waits for the initial user prompt instead of starting a competi
   context.hasUI = false;
 
   await pi.emit("session_start", { type: "session_start", reason: "startup" }, context);
+  await runCommand(pi, "chasing", context);
 
   assert.equal(pi.messages.length, 0);
   const [result] = await pi.emit(
@@ -362,8 +391,7 @@ test("a private rationale is persisted before its answer and never rendered", as
     { type: "before_agent_start", prompt: "I think microtasks run first.", systemPrompt: "BASE", systemPromptOptions: {} },
     context,
   );
-  const evidencePath = join(cwd, ".chasing", "sessions", "pi-session-1.jsonl");
-  const events = (await readFile(evidencePath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+  const events = (await readFile(evidencePath(cwd, pi), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
   const prepared = events.find((event) => event.type === "question_prepared");
   assert.equal(events.filter((event) => event.type === "question_prepared").length, 1);
   const completed = events.find((event) => event.type === "assistant_turn_completed");
@@ -418,7 +446,7 @@ test("a no-material Learn session retains full retrieval trace but displays at m
   const visible = replacement.message.content.find((part: any) => part.type === "text").text;
   assert.equal((visible.match(/https:\/\/example\.org/g) ?? []).length, 3);
 
-  const events = (await readFile(join(cwd, ".chasing", "sessions", "pi-session-1.jsonl"), "utf8"))
+  const events = (await readFile(evidencePath(cwd, pi), "utf8"))
     .trim().split("\n").map((line) => JSON.parse(line));
   const sourceEvent = events.find((event) => event.type === "sources_retrieved");
   assert.equal(sourceEvent.data.sources.length, 4);
@@ -649,9 +677,10 @@ test("Langfuse misconfiguration never blocks canonical local evidence", async ()
   );
 
   await pi.emit("session_start", { type: "session_start", reason: "startup" }, context);
+  await runCommand(pi, "chasing", context);
   await runTool(pi, "chasing_confirm_mode", { mode: "learn" });
 
-  const evidence = await readFile(join(cwd, ".chasing", "sessions", "pi-session-1.jsonl"), "utf8");
+  const evidence = await readFile(evidencePath(cwd, pi), "utf8");
   assert.match(evidence, /session_started/);
   assert.match(evidence, /mode_confirmed/);
   assert.match(evidence, /chasing-config-v1/);
