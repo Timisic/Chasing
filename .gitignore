@@ -2,3 +2,4 @@ node_modules/
 .chasing/
 dist/
 *.log
+eval/sessions/
