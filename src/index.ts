@@ -470,10 +470,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       };
       runtime.state.pendingQuestion = question;
       preparedForRender = question;
-      if (question.stage === "mapping") setPhase("mapping");
-      if (question.stage === "deepening") setPhase("deepening");
-      if (question.stage === "verification") setPhase("verification");
-      if (question.stage === "ending") setPhase("ending");
+      setPhase(question.stage);
       await record("question_prepared", {
         questionId: question.id,
         stage: question.stage,

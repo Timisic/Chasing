@@ -13,6 +13,7 @@ export type ChasingPhase =
   | "ending"
   | "ended"
   | "inactive";
+export type QuestionStage = Extract<ChasingPhase, "mapping" | "deepening" | "verification" | "ending">;
 export type Intervention = "none" | "clarify" | "narrow" | "hint" | "explain";
 
 export interface SourceReference {
@@ -46,7 +47,7 @@ export interface MaterialSnapshot {
 
 export interface PreparedQuestion {
   id: string;
-  stage: "mapping" | "deepening" | "verification" | "ending";
+  stage: QuestionStage;
   rationale: string;
   context?: string;
   terms?: Array<{ term: string; definition: string }>;
