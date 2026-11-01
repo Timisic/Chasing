@@ -1,0 +1,4 @@
+node_modules/
+.chasing/
+dist/
+*.log
