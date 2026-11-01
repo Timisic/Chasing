@@ -175,7 +175,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       });
     } else if (state.pendingQuestion && !state.pendingQuestion.answered) {
       state.pendingQuestion.answered = true;
-      if (state.pendingQuestion.stage === "verification") state.verificationCompleted = true;
+      state.lastAnsweredStage = state.pendingQuestion.stage;
       await record("user_answer", {
         questionId: state.pendingQuestion.id,
         answer: event.prompt,
@@ -215,14 +215,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
   pi.on("tool_call", (event, ctx) => {
     if (!state?.active) return;
 
-    if (
-      isToolCallEventType("ls", event)
-      || isToolCallEventType("find", event)
-    ) {
-      return { block: true, reason: MATERIAL_ACCESS_BLOCK_REASON };
-    }
-
-    if (isToolCallEventType("bash", event)) {
+    if (["ls", "find", "bash", "edit", "write"].includes(event.toolName)) {
       return { block: true, reason: MATERIAL_ACCESS_BLOCK_REASON };
     }
 
@@ -408,6 +401,9 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     async execute(_toolCallId, params) {
       const runtime = requireActive();
       if (!runtime.state.mission) throw new Error("Confirm the mission before preparing a question; before that, use a diagnostic round");
+      if (runtime.state.pendingDiagnosticRound && !runtime.state.pendingDiagnosticRound.answered) {
+        throw new Error("A diagnostic round is still awaiting the user's answer");
+      }
       if (runtime.state.coverage.length === 0) throw new Error("Define mission coverage before preparing a question");
       if (params.sources.length > 3) throw new Error("At most three compact sources are allowed");
       const linkedSources = params.sources.map((source) => {
@@ -569,7 +565,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       for (const inputPath of params.paths) {
         const absolutePath = await realpath(resolve(runtime.context.cwd, inputPath));
         if (![".md", ".markdown"].includes(extname(absolutePath).toLowerCase())) {
-          throw new Error(`Unsupported material format: ${inputPath}. Chasing V1 accepts only Markdown.`);
+          throw new Error(`Unsupported material format: ${inputPath}. Chasing accepts only Markdown.`);
         }
         const info = await stat(absolutePath);
         if (info.size > runtime.config.maxMaterialBytes) {
@@ -604,7 +600,6 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       if (topics.length < 3 || topics.length > 8) throw new Error("Mission coverage must contain 3-8 items");
       if (new Set(topics).size !== topics.length) throw new Error("Coverage topics must be unique");
       runtime.state.coverage = topics.map((topic) => ({ topic, status: "pending" })) as CoverageItem[];
-      runtime.state.verificationCompleted = false;
       await record("coverage_defined", { items: runtime.state.coverage });
       return textResult(`Coverage defined:\n${topics.map((topic) => `- [ ] ${topic}`).join("\n")}`);
     },
@@ -626,11 +621,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     }),
     async execute(_id, params) {
       const runtime = requireActive();
-      const lastQuestion = runtime.state.pendingQuestion;
-      if (
-        params.updates.some(({ status }) => status === "verified")
-        && !(lastQuestion?.answered && lastQuestion.stage === "verification")
-      ) {
+      if (params.updates.some(({ status }) => status === "verified") && runtime.state.lastAnsweredStage !== "verification") {
         throw new Error(
           "Mark coverage verified only right after the user answers a stage=verification question; ask one first",
         );
@@ -656,7 +647,6 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     async execute(_id, params) {
       const runtime = requireActive();
       if (runtime.state.coverage.length === 0) throw new Error("Define mission coverage before suggesting the end");
-      if (!runtime.state.verificationCompleted) throw new Error("Complete a verification question before suggesting the end");
       if (runtime.state.coverage.some(({ status }) => status !== "verified")) {
         throw new Error("Every mission coverage item must be verified before suggesting the end");
       }
@@ -692,6 +682,10 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
   pi.registerCommand("chasing-leave", {
     description: "Leave Chasing and return to ordinary Pi",
     handler: async (_args, ctx) => {
+      if (!state?.active) {
+        ctx.ui.notify("Chasing 未在运行。", "info");
+        return;
+      }
       const runtime = requireRuntime();
       runtime.state.active = false;
       setPhase("inactive");
@@ -706,6 +700,10 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
   pi.registerCommand("chasing-sync", {
     description: "Replay the current Chasing evidence into configured Langfuse",
     handler: async (_args, ctx) => {
+      if (!state) {
+        ctx.ui.notify("当前会话没有 Chasing 证据可同步。", "warning");
+        return;
+      }
       const runtime = requireRuntime();
       if (!runtime.config.langfuse.enabled) {
         ctx.ui.notify("Langfuse 同步未启用；本地证据未受影响。", "warning");

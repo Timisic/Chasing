@@ -19,6 +19,7 @@ export class EvidenceRecorder {
   private readonly now: () => Date;
   private activeFlush: Promise<number> | undefined;
   private fileOperation: Promise<void> = Promise.resolve();
+  private recordChain: Promise<unknown> = Promise.resolve();
 
   private evidenceDirectory(): string {
     return isAbsolute(this.config.evidenceDirectory)
@@ -147,7 +148,14 @@ export class EvidenceRecorder {
     return { synced, queued };
   }
 
-  async record(state: ChasingState, type: string, data: Record<string, unknown>): Promise<EvidenceEvent> {
+  // Parallel tool calls record concurrently; chaining keeps the JSONL in sequence order.
+  record(state: ChasingState, type: string, data: Record<string, unknown>): Promise<EvidenceEvent> {
+    const recorded = this.recordChain.then(() => this.append(state, type, data));
+    this.recordChain = recorded.catch(() => {});
+    return recorded;
+  }
+
+  private async append(state: ChasingState, type: string, data: Record<string, unknown>): Promise<EvidenceEvent> {
     state.sequence += 1;
     const event: EvidenceEvent = {
       schemaVersion: state.versions.evidence,

@@ -109,3 +109,12 @@ test("a new event queued during an active flush is never overwritten", async () 
     "",
   );
 });
+
+test("concurrent records land in the session file in sequence order", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "chasing-order-"));
+  const recorder = new EvidenceRecorder(cwd, { ...config, langfuse: { ...config.langfuse, enabled: false } }, { appendEntry() {} }, { enabled: false, async sync() {} });
+  const state = createInitialState("order-session");
+  await Promise.all(Array.from({ length: 20 }, (_, index) => recorder.record(state, "tick", { index })));
+  const lines = (await readFile(join(cwd, ".chasing", "sessions", "order-session.jsonl"), "utf8")).trim().split("\n");
+  assert.deepEqual(lines.map((line) => JSON.parse(line).sequence), Array.from({ length: 20 }, (_, index) => index + 1));
+});

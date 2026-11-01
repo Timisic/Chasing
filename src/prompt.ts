@@ -22,7 +22,7 @@ export function buildChasingPrompt(basePrompt: string, state: ChasingState): str
     })),
     masteryMap: state.masteryMap,
     coverage: state.coverage,
-    verificationCompleted: state.verificationCompleted,
+    lastAnsweredStage: state.lastAnsweredStage,
     endSuggested: state.endSuggested,
   });
 

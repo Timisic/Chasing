@@ -105,7 +105,7 @@ export interface ChasingState {
   retrievals: RetrievalTrace[];
   masteryMap: MasteryArea[];
   coverage: CoverageItem[];
-  verificationCompleted: boolean;
+  lastAnsweredStage?: PreparedQuestion["stage"];
   evaluationEligible: boolean;
   pendingQuestion?: PreparedQuestion;
   pendingDiagnosticRound?: PreparedDiagnosticRound;
@@ -146,7 +146,6 @@ export function createInitialState(sessionId: string, now = new Date()): Chasing
     retrievals: [],
     masteryMap: [],
     coverage: [],
-    verificationCompleted: false,
     evaluationEligible: false,
     endSuggested: false,
     versions: {
