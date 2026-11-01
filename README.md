@@ -83,7 +83,7 @@ npm run check
 
 - `src/index.ts`：Pi 生命周期、命令和 Chasing 工具
 - `src/domain.ts`：会话状态与证据领域模型
-- `src/prompt.ts`：每轮注入的 Chasing 行为契约
+- `src/prompt.md`：每轮注入的 Chasing 行为契约（`src/prompt.ts` 在其后附上当前状态）
 - `src/evidence.ts`：本地 JSONL 与 Pi custom entry
 - `src/langfuse.ts`：可选 OTLP 同步
 - `src/retrieval.ts`：受限 HTTPS 官方/一手来源抓取
