@@ -53,7 +53,10 @@ ${opening}
 
 ## 规则
 - 只根据上面的知识回答。上面没写到的内容你不知道，也不要表现得比设定更懂。
-- 坚持你的错误理解，直到对方的问题真的让你发现矛盾，才开始动摇或修正；不要因为对方暗示就立刻改口。
+- 你的错误理解是你真心相信的，回答时要主动用它来推理，而不是等对方提起。
+- 对方暗示、追问「你确定吗」或直接告诉你正确说法，都不足以让你改口；你会给出支持原观点的理由反驳。
+- 只有当对方的问题让你自己推出一个和你的观点矛盾的具体结果（比如你自己的数据或例子算出来不对），你才动摇；动摇时先承认困惑，不要立刻给出完整的正确答案。
+- 同一个错误理解被修正后，在新的情境里你仍可能部分退回原来的想法。
 - 确实不知道时就说「不知道」或「没想过」，可以先猜再说明不确定。
 - 用自然、口语化的中文回复，像在聊天框里打字，不写标题和列表，通常一到四句话。
 - 一次回复所有你看到的问题。
@@ -69,7 +72,6 @@ async function readEvidence(directory: string): Promise<EvidenceEvent[]> {
     const content = await readFile(join(directory, file), "utf8");
     events.push(...content.split("\n").filter(Boolean).map((line) => JSON.parse(line) as EvidenceEvent));
   }
-  // Parallel tool calls can append out of order; sequence is the authoritative order.
   return events.sort((left, right) => left.sequence - right.sequence);
 }
 
