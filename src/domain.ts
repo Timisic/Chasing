@@ -46,7 +46,7 @@ export interface MaterialSnapshot {
 
 export interface PreparedQuestion {
   id: string;
-  stage: "onboarding" | "mapping" | "deepening" | "verification" | "ending" | "core";
+  stage: "mapping" | "deepening" | "verification" | "ending";
   rationale: string;
   context?: string;
   terms?: Array<{ term: string; definition: string }>;

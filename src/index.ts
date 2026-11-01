@@ -377,12 +377,10 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     promptSnippet: "Privately record one Chasing question before displaying it",
     parameters: Type.Object({
       stage: Type.Union([
-        Type.Literal("onboarding"),
         Type.Literal("mapping"),
         Type.Literal("deepening"),
         Type.Literal("verification"),
         Type.Literal("ending"),
-        Type.Literal("core"),
       ]),
       rationale: Type.String({ description: "Private, brief: latest observation and why this question is most valuable" }),
       context: Type.Optional(Type.String({ description: "Visible minimum background required to understand the question" })),
@@ -409,10 +407,8 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     }),
     async execute(_toolCallId, params) {
       const runtime = requireActive();
-      if (params.stage !== "onboarding" && !runtime.state.mission) throw new Error("Confirm the mission before core questioning");
-      if (params.stage !== "onboarding" && runtime.state.coverage.length === 0) {
-        throw new Error("Define mission coverage before core questioning");
-      }
+      if (!runtime.state.mission) throw new Error("Confirm the mission before preparing a question; before that, use a diagnostic round");
+      if (runtime.state.coverage.length === 0) throw new Error("Define mission coverage before preparing a question");
       if (params.sources.length > 3) throw new Error("At most three compact sources are allowed");
       const linkedSources = params.sources.map((source) => {
         const normalizedUrl = new URL(source.url).toString();
@@ -475,7 +471,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       runtime.state.pendingQuestion = question;
       preparedForRender = question;
       if (question.stage === "mapping") setPhase("mapping");
-      if (question.stage === "deepening" || question.stage === "core") setPhase("deepening");
+      if (question.stage === "deepening") setPhase("deepening");
       if (question.stage === "verification") setPhase("verification");
       if (question.stage === "ending") setPhase("ending");
       await record("question_prepared", {
