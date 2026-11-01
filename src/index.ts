@@ -17,6 +17,7 @@ import {
   type MasteryArea,
   type PreparedDiagnosticRound,
   type PreparedQuestion,
+  type QuestionStage,
   type RetrievalTrace,
   type SourceReference,
 } from "./domain.ts";
@@ -27,7 +28,7 @@ import { fetchRetrievedSources, type HostResolver } from "./retrieval.ts";
 
 const STATE_ENTRY = "chasing:state";
 const THINKING_LABEL = "Chasing 正在选择下一问…";
-function currentQuestionStage(phase: ChasingState["phase"]): PreparedQuestion["stage"] {
+function currentQuestionStage(phase: ChasingState["phase"]): QuestionStage {
   return phase === "mapping" || phase === "deepening" || phase === "verification" ? phase : "deepening";
 }
 

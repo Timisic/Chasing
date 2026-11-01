@@ -72,7 +72,7 @@ async function readEvidence(directory: string): Promise<EvidenceEvent[]> {
     const content = await readFile(join(directory, file), "utf8");
     events.push(...content.split("\n").filter(Boolean).map((line) => JSON.parse(line) as EvidenceEvent));
   }
-  return events.sort((left, right) => left.sequence - right.sequence);
+  return events;
 }
 
 interface RunResult {

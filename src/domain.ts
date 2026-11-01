@@ -105,7 +105,7 @@ export interface ChasingState {
   retrievals: RetrievalTrace[];
   masteryMap: MasteryArea[];
   coverage: CoverageItem[];
-  lastAnsweredStage?: PreparedQuestion["stage"];
+  lastAnsweredStage?: QuestionStage;
   evaluationEligible: boolean;
   pendingQuestion?: PreparedQuestion;
   pendingDiagnosticRound?: PreparedDiagnosticRound;
