@@ -685,3 +685,44 @@ test("Langfuse misconfiguration never blocks canonical local evidence", async ()
   assert.match(evidence, /mode_confirmed/);
   assert.match(evidence, /chasing-config-v1/);
 });
+
+test("coverage can be verified only from an answered verification question", async () => {
+  const { pi, context } = await startedHarness();
+  await establishLearnMission(pi, context, "Explain the mechanism in my own words.");
+  const verify = { topic: "underlying mechanism", status: "verified", evidence: "Explained it." };
+
+  await assert.rejects(runTool(pi, "chasing_update_coverage", { updates: [verify] }), /verification question/);
+
+  await runTool(pi, "chasing_prepare_question", {
+    stage: "deepening",
+    rationale: "Probe the mechanism before verifying it.",
+    question: "What happens first in the mechanism?",
+    intervention: "none",
+    sources: [],
+  });
+  await pi.emit(
+    "before_agent_start",
+    { type: "before_agent_start", prompt: "The first step is the trigger.", systemPrompt: "BASE", systemPromptOptions: {} },
+    context,
+  );
+  await assert.rejects(runTool(pi, "chasing_update_coverage", { updates: [verify] }), /verification question/);
+  await runTool(pi, "chasing_update_coverage", {
+    updates: [{ topic: "underlying mechanism", status: "covered", evidence: "Named the trigger." }],
+  });
+
+  await runTool(pi, "chasing_prepare_question", {
+    stage: "verification",
+    rationale: "Teach-back of the whole mechanism.",
+    question: "How would you explain the whole mechanism to a colleague?",
+    intervention: "none",
+    sources: [],
+  });
+  await assert.rejects(runTool(pi, "chasing_update_coverage", { updates: [verify] }), /verification question/);
+  await pi.emit(
+    "before_agent_start",
+    { type: "before_agent_start", prompt: "Trigger, then propagation, then the visible effect.", systemPrompt: "BASE", systemPromptOptions: {} },
+    context,
+  );
+  await runTool(pi, "chasing_update_coverage", { updates: [verify] });
+  assert.equal(latestState(pi).coverage[1].status, "verified");
+});

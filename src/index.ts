@@ -626,6 +626,15 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     }),
     async execute(_id, params) {
       const runtime = requireActive();
+      const lastQuestion = runtime.state.pendingQuestion;
+      if (
+        params.updates.some(({ status }) => status === "verified")
+        && !(lastQuestion?.answered && lastQuestion.stage === "verification")
+      ) {
+        throw new Error(
+          "Mark coverage verified only right after the user answers a stage=verification question; ask one first",
+        );
+      }
       for (const update of params.updates) {
         const item = runtime.state.coverage.find(({ topic }) => topic === update.topic);
         if (!item) throw new Error(`Unknown coverage topic: ${update.topic}`);
