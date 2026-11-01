@@ -27,6 +27,10 @@ import { fetchRetrievedSources, type HostResolver } from "./retrieval.ts";
 
 const STATE_ENTRY = "chasing:state";
 const THINKING_LABEL = "Chasing 正在选择下一问…";
+function currentQuestionStage(phase: ChasingState["phase"]): PreparedQuestion["stage"] {
+  return phase === "mapping" || phase === "deepening" || phase === "verification" ? phase : "deepening";
+}
+
 export const MATERIAL_ACCESS_BLOCK_REASON =
   "Chasing does not inspect the current workspace. Only explicitly supplied Markdown material may be read.";
 
@@ -369,12 +373,12 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
     description: "Privately record the rationale and prepare the single user-visible Chasing question.",
     promptSnippet: "Privately record one Chasing question before displaying it",
     parameters: Type.Object({
-      stage: Type.Union([
+      stage: Type.Optional(Type.Union([
         Type.Literal("mapping"),
         Type.Literal("deepening"),
         Type.Literal("verification"),
         Type.Literal("ending"),
-      ]),
+      ], { description: "Omit to stay in the current stage" })),
       rationale: Type.String({ description: "Private, brief: latest observation and why this question is most valuable" }),
       context: Type.Optional(Type.String({ description: "Visible minimum background required to understand the question" })),
       terms: Type.Optional(Type.Array(Type.Object({ term: Type.String(), definition: Type.String() }), { maxItems: 4 })),
@@ -449,7 +453,7 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
       }
       const question: PreparedQuestion = {
         id: randomUUID(),
-        stage: params.stage,
+        stage: params.stage ?? currentQuestionStage(runtime.state.phase),
         rationale,
         ...(params.context?.trim() ? { context: params.context.trim() } : {}),
         ...(params.terms?.length
@@ -464,6 +468,11 @@ export default function chasingExtension(pi: ExtensionAPI, dependencies: Chasing
         preparedAt: new Date().toISOString(),
         answered: false,
       };
+      // Asking again after an end suggestion means the user declined it, even if the model never called confirm_end.
+      if (runtime.state.endSuggested && question.stage !== "ending") {
+        runtime.state.endSuggested = false;
+        await record("end_declined", { inferred: true });
+      }
       runtime.state.pendingQuestion = question;
       preparedForRender = question;
       setPhase(question.stage);

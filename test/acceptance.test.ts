@@ -726,3 +726,46 @@ test("coverage can be verified only from an answered verification question", asy
   await runTool(pi, "chasing_update_coverage", { updates: [verify] });
   assert.equal(latestState(pi).coverage[1].status, "verified");
 });
+
+test("a question after an end suggestion records the decline, and a missing stage keeps the current one", async () => {
+  const { pi, context, statuses } = await startedHarness();
+  await runTool(pi, "chasing_confirm_mode", { mode: "clarify-decide" });
+  await runTool(pi, "chasing_confirm_mission", { mission: "Choose a launch scope." });
+  await runTool(pi, "chasing_define_coverage", {
+    items: [{ topic: "Target user" }, { topic: "Trade-offs" }, { topic: "Success evidence" }],
+  });
+  await runTool(pi, "chasing_prepare_question", {
+    rationale: "Map the space first.",
+    question: "Who is the first user？",
+    intervention: "none",
+    sources: [],
+  });
+  assert.equal(latestState(pi).pendingQuestion.stage, "mapping");
+  await pi.emit("before_agent_start", { type: "before_agent_start", prompt: "Clinic admins.", systemPrompt: "BASE", systemPromptOptions: {} }, context);
+  await runTool(pi, "chasing_prepare_question", {
+    stage: "verification",
+    rationale: "Teach-back.",
+    question: "Which scope do you choose, and why？",
+    intervention: "none",
+    sources: [],
+  });
+  await pi.emit("before_agent_start", { type: "before_agent_start", prompt: "Narrow launch for clinic admins.", systemPrompt: "BASE", systemPromptOptions: {} }, context);
+  await runTool(pi, "chasing_update_coverage", {
+    updates: ["Target user", "Trade-offs", "Success evidence"].map((topic) => ({ topic, status: "verified", evidence: "Restated." })),
+  });
+  await runTool(pi, "chasing_suggest_end", { reason: "All verified." });
+  await pi.emit("before_agent_start", { type: "before_agent_start", prompt: "Not yet, how do I run it in lavaan?", systemPrompt: "BASE", systemPromptOptions: {} }, context);
+
+  await runTool(pi, "chasing_prepare_question", {
+    rationale: "The user declined and wants the practical step.",
+    question: "Which group.equal constraints would you write first？",
+    intervention: "none",
+    sources: [],
+  });
+  const state = latestState(pi);
+  assert.equal(state.endSuggested, false);
+  assert.equal(state.pendingQuestion.stage, "deepening");
+  assert.equal(statuses.at(-1), "Chasing · 盲区深挖");
+  const types = (await readFile(evidencePath(context.cwd, pi), "utf8")).trim().split("\n").map((line) => JSON.parse(line).type);
+  assert.deepEqual(types.slice(-3), ["user_input", "end_declined", "question_prepared"]);
+});
